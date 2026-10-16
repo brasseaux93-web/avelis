@@ -111,7 +111,7 @@ export async function encryptText(plaintext: string, keyId = encryptionKeyId()):
 }
 
 export async function decryptText(stored: string): Promise<string> {
-  let parsed: unknown = stored;
+  let parsed: unknown;
   try {
     parsed = JSON.parse(stored) as unknown;
   } catch {

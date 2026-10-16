@@ -1,4 +1,4 @@
-import type { KmsProvider, KmsProviderName } from './types';
+import type { KmsProvider } from './types';
 import { LocalDevKms } from './localDevKms';
 import { AwsKmsProvider } from './awsKms';
 import { VaultKmsProvider } from './vaultKms';
@@ -85,7 +85,7 @@ export function securityHealthSnapshot(): {
 } {
   const provider = (process.env.KMS_PROVIDER || 'local').toLowerCase();
   const isProd = process.env.NODE_ENV === 'production';
-  let productionSafe = false;
+  let productionSafe: boolean;
   try {
     if (isProd) {
       assertProductionKms();

@@ -37,6 +37,9 @@ export function renderReceiptPdfBytes(input: ReceiptPdfInput): Uint8Array {
 }
 
 export function exportLeftNoTrace(): { localStorageKeys: string[] } {
+  // Read-only audit that proves nothing was written to localStorage.
+  // eslint-disable-next-line no-restricted-globals
   if (typeof localStorage === 'undefined') return { localStorageKeys: [] };
+  // eslint-disable-next-line no-restricted-globals
   return { localStorageKeys: Object.keys(localStorage) };
 }

@@ -47,3 +47,6 @@ jobs:
         
       - name: Run retention tests
         run: npm run test:retention
+
+      - name: Run room + security tests
+        run: npx vitest run tests/room tests/security

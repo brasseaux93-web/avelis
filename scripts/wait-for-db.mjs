@@ -10,6 +10,6 @@ try {
   await sql.end({ timeout: 1 });
   process.exit(0);
 } catch {
-  try { await sql.end({ timeout: 1 }); } catch {}
+  try { await sql.end({ timeout: 1 }); } catch { /* ignore */ }
   process.exit(1);
 }

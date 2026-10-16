@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LogoLockup, VerificationStamp, ProtocolMark } from '../components/Logo';
+import { VerificationStamp, ProtocolMark } from '../components/Logo';
 
 import { createFileRoute, Link } from '@tanstack/react-router';
 
@@ -34,8 +34,8 @@ function Index() {
       }
 
       setIsSuccess(true);
-    } catch (err: any) {
-      setFormError(err.message || 'A network error occurred. Please try again.');
+    } catch (err: unknown) {
+      setFormError((err instanceof Error && err.message) || 'A network error occurred. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

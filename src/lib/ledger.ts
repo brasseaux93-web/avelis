@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
  * Creates a canonical JSON string for hashing.
  * Sorts keys recursively.
  */
-export function canonicalize(payload: any): string {
+export function canonicalize(payload: unknown): string {
   if (payload === null || typeof payload !== 'object') {
     return JSON.stringify(payload);
   }
@@ -29,7 +29,7 @@ export function canonicalize(payload: any): string {
 /**
  * Computes the digest of a canonicalized payload.
  */
-export function computePayloadDigest(payload: any): string {
+export function computePayloadDigest(payload: unknown): string {
   const canonicalStr = canonicalize(payload);
   return crypto.createHash('sha256').update(canonicalStr, 'utf8').digest('hex');
 }
