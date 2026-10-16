@@ -20,6 +20,31 @@ export function emailDomainOnly(address: string): string {
   return address.slice(at + 1).toLowerCase() || 'unknown';
 }
 
+const EMAIL_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+
+/** Strict address check: no CR/LF/control chars, no angle brackets, sane length. */
+export function isSafeEmailAddress(address: unknown): address is string {
+  if (typeof address !== 'string') return false;
+  if (address.length === 0 || address.length > 254) return false;
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x1f\x7f<>]/.test(address)) return false;
+  return EMAIL_RE.test(address);
+}
+
+/** Remove CR/LF and other control characters from a header value (prevents header injection). */
+export function sanitizeHeaderValue(value: string): string {
+  // eslint-disable-next-line no-control-regex
+  return value.replace(/[\x00-\x1f\x7f]+/g, ' ').trim();
+}
+
+/** SMTP transparency (RFC 5321 4.5.2): lines beginning with '.' get an extra '.'. */
+export function dotStuff(body: string): string {
+  return body
+    .split(/\r?\n/)
+    .map((line) => (line.startsWith('.') ? '.' + line : line))
+    .join('\r\n');
+}
+
 export type InviteEmailArgs = {
   to: string;
   inviteCode: string;
@@ -33,6 +58,10 @@ export async function sendInviteEmail(args: InviteEmailArgs): Promise<EmailDeliv
     return { ok: false, channel: 'copy_link', reason: 'not_configured' };
   }
 
+  if (!isSafeEmailAddress(args.to) || !isSafeEmailAddress(process.env.SMTP_FROM)) {
+    return { ok: false, channel: 'copy_link', reason: 'send_failed' };
+  }
+
   const host = process.env.SMTP_HOST!;
   const port = Number(process.env.SMTP_PORT || 587);
   const from = process.env.SMTP_FROM!;
@@ -40,12 +69,12 @@ export async function sendInviteEmail(args: InviteEmailArgs): Promise<EmailDeliv
   const pass = process.env.SMTP_PASS || '';
   const secure = process.env.SMTP_SECURE === 'true' || port === 465;
 
-  const subject = `Avelis session invite: ${args.sessionTitle}`;
+  const subject = sanitizeHeaderValue(`Avelis session invite: ${args.sessionTitle}`);
   const body = [
     'You have been invited to an Avelis facilitated session.',
     '',
-    `Join path: ${args.joinUrl}`,
-    `One-time invite code: ${args.inviteCode}`,
+    `Join path: ${sanitizeHeaderValue(args.joinUrl)}`,
+    `One-time invite code: ${sanitizeHeaderValue(args.inviteCode)}`,
     '',
     'Room messages are delivered live and are not stored by Avelis.',
     'This code is single-use. Parties have no standing accounts.',
@@ -72,6 +101,9 @@ type SmtpOpts = {
 };
 
 function smtpSend(opts: SmtpOpts): Promise<void> {
+  if (!isSafeEmailAddress(opts.to) || !isSafeEmailAddress(opts.from)) {
+    return Promise.reject(new Error('smtp_invalid_address'));
+  }
   return new Promise((resolve, reject) => {
     const socket: net.Socket = opts.secure
       ? tls.connect({ host: opts.host, port: opts.port, servername: opts.host })
@@ -138,11 +170,11 @@ function smtpSend(opts: SmtpOpts): Promise<void> {
             [
               `From: ${opts.from}`,
               `To: ${opts.to}`,
-              `Subject: ${opts.subject}`,
+              `Subject: ${sanitizeHeaderValue(opts.subject)}`,
               'MIME-Version: 1.0',
               'Content-Type: text/plain; charset=utf-8',
               '',
-              opts.body,
+              dotStuff(opts.body),
               '.',
             ].join('\r\n')
           );

@@ -18,6 +18,7 @@ import {
   addParty,
   removeParty,
   ensureRoom,
+  isPartyRevoked,
   deliverTo,
   type WebSocketLike,
 } from './memory';
@@ -137,6 +138,11 @@ export function createRoomServer(port = PORT): WebSocketServer {
 
     if (!isValidRoomToken(roomToken, sessionId, partyId)) {
       ws.close(1008, 'Invalid roomToken');
+      return;
+    }
+
+    if (isPartyRevoked(sessionId, partyId)) {
+      ws.close(4003, 'Access revoked');
       return;
     }
 

@@ -46,7 +46,6 @@ export function ProcessAgent(props: {
   useEffect(() => {
     if (!disabled) void onConsult();
     // first paint only
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   const ask = async (text: string) => {

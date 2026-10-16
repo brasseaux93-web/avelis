@@ -137,11 +137,46 @@ export function teardownRoom(sessionId: string): boolean {
   }
   room.parties.clear();
   rooms.delete(sessionId);
+  revokedParties.delete(sessionId);
   return true;
+}
+
+const revokedParties = new Map<string, Set<string>>();
+
+/** Mark a party as revoked for a session and close any of its live sockets. Returns sockets closed. */
+export function evictParty(sessionId: string, partyId: string): number {
+  let set = revokedParties.get(sessionId);
+  if (!set) {
+    set = new Set();
+    revokedParties.set(sessionId, set);
+  }
+  set.add(partyId);
+  const room = rooms.get(sessionId);
+  if (!room) return 0;
+  let closed = 0;
+  for (const [socket, meta] of [...room.parties]) {
+    if (meta.partyId !== partyId) continue;
+    try {
+      if (socket.readyState === socket.OPEN) {
+        socket.send(JSON.stringify({ type: 'access_revoked' }));
+      }
+      socket.close(4003, 'Access revoked');
+    } catch {
+      // Ignore close errors.
+    }
+    room.parties.delete(socket);
+    closed += 1;
+  }
+  return closed;
+}
+
+export function isPartyRevoked(sessionId: string, partyId: string): boolean {
+  return revokedParties.get(sessionId)?.has(partyId) ?? false;
 }
 
 /** Test-only: wipe all rooms (not used in production paths). */
 export function _resetRoomsForTests(): void {
+  revokedParties.clear();
   for (const id of [...rooms.keys()]) {
     for (const hook of teardownHooks) {
       try {

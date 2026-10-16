@@ -1,5 +1,4 @@
 import { expect, test, describe, vi } from 'vitest';
-import { getJointMinute } from '../../src/server/minute';
 import fs from 'node:fs';
 
 describe('Export Safety', () => {
@@ -22,7 +21,7 @@ describe('Export Safety', () => {
     };
     
     // We expect the export function to return a buffer without hitting fs
-    const mockExportToPdf = (minute: any): Buffer => {
+    const mockExportToPdf = (minute: { content: string }): Buffer => {
       return Buffer.from(minute.content);
     };
 

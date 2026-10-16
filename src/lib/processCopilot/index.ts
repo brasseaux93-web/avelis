@@ -1,5 +1,5 @@
 import { assertSpeechFree } from './firewall';
-import { copilotStatus, dialogueWithModel, rankWithModel, readModelConfig } from './model';
+import { dialogueWithModel, rankWithModel, readModelConfig } from './model';
 import { applyProcessMarkPayloads, buildSnapshot, type SnapshotInput } from './snapshot';
 import { runPlaybook } from './playbook';
 import type { CopilotResult } from './types';

@@ -55,7 +55,6 @@ export function VoiceMesh({ paused }: { paused: boolean }) {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [on, paused, isConnected]);
 
   const others = presence.filter((p) => p.partyId !== partyId);

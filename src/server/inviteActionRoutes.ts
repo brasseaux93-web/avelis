@@ -1,10 +1,11 @@
+import { requestPartyEviction } from '../room/control';
 import express from 'express';
 import { and, eq } from 'drizzle-orm';
 import { db } from '../db/index';
 import { sessions, parties } from '../db/schema';
 import { appendLedgerLine } from '../lib/ledgerAppend';
 import { generateInviteCode } from '../lib/invite';
-import { emailConfigured, emailDomainOnly, sendInviteEmail } from '../lib/email';
+import { emailConfigured, emailDomainOnly, isSafeEmailAddress, sendInviteEmail } from '../lib/email';
 import { logEvent } from '../lib/observability';
 
 function publicOrigin(req: express.Request): string {
@@ -115,6 +116,8 @@ export function registerInviteActionRoutes(
         });
         return row;
       });
+      // Cut any live room connection for this party (best effort; room also rejects reconnects).
+      await requestPartyEviction(sessionId, partyId);
       res.status(200).json({ party: { id: updated.id, inviteStatus: updated.inviteStatus } });
     } catch (error) {
       logEvent('error', 'invite_revoke_failed', {
@@ -148,10 +151,15 @@ export function registerInviteActionRoutes(
       if (party.inviteStatus === 'revoked' || party.inviteStatus === 'joined') {
         return res.status(409).json({ error: `Cannot deliver invite with status ${party.inviteStatus}` });
       }
-      const deliveryAddress =
-        typeof body.deliveryAddress === 'string' && body.deliveryAddress.includes('@')
+      const requested =
+        typeof body.deliveryAddress === 'string' && body.deliveryAddress.trim() !== ''
           ? body.deliveryAddress.trim()
-          : party.deliveryAddress;
+          : null;
+      if (requested !== null && !isSafeEmailAddress(requested)) {
+        return res.status(400).json({ error: 'Invalid delivery address' });
+      }
+      const stored = isSafeEmailAddress(party.deliveryAddress) ? party.deliveryAddress : null;
+      const deliveryAddress = requested ?? stored;
       const { code, hash } = generateInviteCode();
       await db
         .update(parties)

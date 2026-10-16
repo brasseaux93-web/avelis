@@ -1,5 +1,5 @@
 import express from 'express';
-import { eq, and, desc, asc } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { db } from '../db/index';
 import { sessions, agendaItems } from '../db/schema';
 import { appendLedgerLine } from '../lib/ledgerAppend';

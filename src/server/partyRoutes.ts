@@ -1,11 +1,12 @@
 import express from 'express';
-import { eq, asc } from 'drizzle-orm';
+import { and, eq, asc, sql } from 'drizzle-orm';
 import { db } from '../db/index';
-import { sessions, ledgerLines, jointMinutes } from '../db/schema';
+import { sessions, ledgerLines, jointMinutes, parties } from '../db/schema';
 import { verifyPartySessionToken } from '../lib/auth';
 import { appendLedgerLine } from '../lib/ledgerAppend';
 import { decryptJson } from '../lib/encryption';
 import { getJointMinute } from './minute';
+import { partyStatusAllowsAccess } from '../lib/partyAccess';
 
 declare global {
   namespace Express {
@@ -16,7 +17,7 @@ declare global {
   }
 }
 
-const requirePartyAuth: express.RequestHandler = (req, res, next) => {
+const requirePartyAuth: express.RequestHandler = async (req, res, next) => {
   const header = req.headers.authorization;
   if (!header || !header.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Party credentials are missing.' });
@@ -25,6 +26,20 @@ const requirePartyAuth: express.RequestHandler = (req, res, next) => {
   const payload = verifyPartySessionToken(token);
   if (!payload) {
     return res.status(401).json({ error: 'Party credentials are missing.' });
+  }
+  try {
+    // Tokens are stateless; re-check the party row so revocation takes effect immediately.
+    const [party] = await db
+      .select({ inviteStatus: parties.inviteStatus })
+      .from(parties)
+      .where(and(eq(parties.id, payload.partyId), eq(parties.sessionId, payload.sessionId)))
+      .limit(1);
+    if (!party || !partyStatusAllowsAccess(party.inviteStatus)) {
+      return res.status(403).json({ error: 'Party access has been revoked.' });
+    }
+  } catch (error) {
+    console.error('[API] party auth lookup failed', error);
+    return res.status(500).json({ error: 'Could not verify party access.' });
   }
   req.partyId = payload.partyId;
   req.partySessionId = payload.sessionId;
@@ -152,22 +167,24 @@ export function registerPartyRoutes(app: express.Express) {
       if (!minute || minute.status !== 'published' || !minute.contentDigest) {
         return res.status(404).json({ error: 'Published joint minute not found.' });
       }
-      const already = (minute.initialedBy || []).includes(partyId);
-      if (already) {
-        return res.status(200).json({
-          id: minute.id,
-          status: minute.status,
-          initialedBy: minute.initialedBy,
-          alreadyInitialed: true,
-        });
-      }
-      const nextInitialed = [...(minute.initialedBy || []), partyId];
-      const [updated] = await db
-        .update(jointMinutes)
-        .set({ initialedBy: nextInitialed, updatedAt: new Date() })
-        .where(eq(jointMinutes.id, minute.id))
-        .returning();
-      await db.transaction(async (tx) => {
+      // Atomic + idempotent: the conditional UPDATE only succeeds once per party, and the
+      // ledger line is written in the same transaction, so retries/races cannot duplicate it.
+      const updated = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .update(jointMinutes)
+          .set({
+            initialedBy: sql`array_append(coalesce(${jointMinutes.initialedBy}, '{}'::uuid[]), ${partyId}::uuid)`,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(jointMinutes.id, minute.id),
+              eq(jointMinutes.status, 'published'),
+              sql`not (${partyId}::uuid = any(coalesce(${jointMinutes.initialedBy}, '{}'::uuid[])))`
+            )
+          )
+          .returning();
+        if (!row) return null;
         await appendLedgerLine(tx, {
           sessionId,
           lineType: 'joint_minute_initialed',
@@ -181,7 +198,17 @@ export function registerPartyRoutes(app: express.Express) {
           source: 'party_ui',
           initialVisibility: 'party_visible',
         });
+        return row;
       });
+      if (!updated) {
+        const current = await getJointMinute(sessionId);
+        return res.status(200).json({
+          id: minute.id,
+          status: current?.status ?? minute.status,
+          initialedBy: current?.initialedBy ?? minute.initialedBy,
+          alreadyInitialed: true,
+        });
+      }
       res.status(200).json({
         id: updated.id,
         status: updated.status,

@@ -33,7 +33,7 @@ export function setPartyViewToken(token: string | null) {
 }
 
 function PartyViewPage() {
-  const [token, setToken] = useState(memoryPartyToken);
+  const [token] = useState(memoryPartyToken);
   const [lines, setLines] = useState<LedgerLine[]>([]);
   const [emptyLedger, setEmptyLedger] = useState<string | undefined>();
   const [minute, setMinute] = useState<MinutePayload['minute']>(null);
